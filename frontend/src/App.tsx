@@ -13,13 +13,14 @@ import QualityView from './views/quality'
 import LineageView from './views/lineage'
 import BackfillView from './views/backfill'
 import MetadataView from './views/metadata'
+import FieldVersionView from './views/fieldversion'
 import EtlView from './views/etl'
 import LakeView from './views/lake'
 import CatalogView from './views/catalog'
 import MonitorView from './views/monitor'
 import SnapshotView from './views/snapshot'
 
-const navItems = [{ label: "运营概览", path: "/" }, { label: "贴源层接入", path: "/ods" }, { label: "明细层清洗", path: "/dwd" }, { label: "汇总层聚合", path: "/dws" }, { label: "应用层输出", path: "/ads" }, { label: "维度定义管理", path: "/dimdef" }, { label: "事实表管理", path: "/factdef" }, { label: "分区策略", path: "/partition" }, { label: "质量探针", path: "/quality" }, { label: "血缘图谱", path: "/lineage" }, { label: "历史重跑", path: "/backfill" }, { label: "元数据目录", path: "/metadata" }, { label: "ETL任务调度", path: "/etl" }, { label: "数据湖存储", path: "/lake" }, { label: "表结构演进", path: "/catalog" }, { label: "运行监控面板", path: "/monitor" }, { label: "快照管理", path: "/snapshot" }]
+const navItems = [{ label: "运营概览", path: "/" }, { label: "贴源层接入", path: "/ods" }, { label: "明细层清洗", path: "/dwd" }, { label: "汇总层聚合", path: "/dws" }, { label: "应用层输出", path: "/ads" }, { label: "维度定义管理", path: "/dimdef" }, { label: "事实表管理", path: "/factdef" }, { label: "分区策略", path: "/partition" }, { label: "质量探针", path: "/quality" }, { label: "血缘图谱", path: "/lineage" }, { label: "历史重跑", path: "/backfill" }, { label: "元数据目录", path: "/metadata" }, { label: "字段含义版本", path: "/field-versions" }, { label: "ETL任务调度", path: "/etl" }, { label: "数据湖存储", path: "/lake" }, { label: "表结构演进", path: "/catalog" }, { label: "运行监控面板", path: "/monitor" }, { label: "快照管理", path: "/snapshot" }]
 
 export default function App() {
   const [operator] = useState('值班管理员')
@@ -54,6 +55,7 @@ export default function App() {
           <Route path="/lineage" element={<LineageView />} />
           <Route path="/backfill" element={<BackfillView />} />
           <Route path="/metadata" element={<MetadataView />} />
+          <Route path="/field-versions" element={<FieldVersionView />} />
           <Route path="/etl" element={<EtlView />} />
           <Route path="/lake" element={<LakeView />} />
           <Route path="/catalog" element={<CatalogView />} />

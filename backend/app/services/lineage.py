@@ -1,9 +1,15 @@
-"""血缘图谱业务规则：状态流转、字段校验与筛选口径都收在这里。"""
+"""血缘图谱业务规则：状态流转、字段校验与筛选口径都收在这里。
+
+血缘节点的字段映射通过 ``field_version_id`` 引用字段含义版本；读取时由
+字段版本服务统一解析成版本快照，血缘页与元数据记录页看到的是同一版
+字段说明、同一个版本号与同一个更新时间。
+"""
 from __future__ import annotations
 
 from typing import Any
 
 from app.store import store
+from app.services.field_version import field_version_service
 
 MODULE = "lineage"
 REQUIRED_FIELDS = ["节点编号", "节点名称", "节点类型"]
@@ -28,10 +34,14 @@ class LineageService:
             rows = [row for row in rows if row.get("status") == status]
         total = len(rows)
         start = max(page - 1, 0) * size
-        return rows[start:start + size], total
+        page_rows = [field_version_service.enrich_lineage(row) for row in rows[start:start + size]]
+        return page_rows, total
 
     def get_entry(self, entry_id: int) -> dict[str, Any] | None:
-        return store.find(MODULE, entry_id)
+        entry = store.find(MODULE, entry_id)
+        if entry is None:
+            return None
+        return field_version_service.enrich_lineage(entry)
 
     def create_entry(self, values: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
         missing = [field for field in REQUIRED_FIELDS if not str(values.get(field) or "").strip()]
@@ -58,4 +68,8 @@ class LineageService:
         entry["status"] = target
         entry["pending"] = target != STATUS_ORDER[-1]
         entry["abnormal"] = action in NEGATIVE_ACTIONS
-        return entry, f"血缘节点已{action}"
+        return field_version_service.enrich_lineage(entry), f"血缘节点已{action}"
+
+    def bind_version(self, entry_id: int, version_id: int) -> tuple[dict[str, Any] | None, str]:
+        """把节点字段映射绑定到字段含义版本，展示实际采用的版本。"""
+        return field_version_service.bind_lineage_version(entry_id, version_id)

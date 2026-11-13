@@ -58,6 +58,20 @@ def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
     return ActionResult(ok=True, message=message, entry=entry)
 
 
+@router.post("/{entry_id}/bind-version", response_model=ActionResult)
+def bind_version(entry_id: int, payload: EntryPayload) -> ActionResult:
+    """把血缘节点的字段映射绑定到某个字段含义版本，页面统一展示该版本说明。"""
+    raw_version_id = payload.values.get("field_version_id")
+    try:
+        version_id = int(raw_version_id)
+    except (TypeError, ValueError):
+        return ActionResult(ok=False, message="field_version_id 必须是整数")
+    entry, message = service.bind_version(entry_id, version_id)
+    if entry is None:
+        return ActionResult(ok=False, message=message)
+    return ActionResult(ok=True, message=message, entry=entry)
+
+
 @router.get("/export")
 def export_entries() -> dict[str, Any]:
     """导出血缘图谱清单：返回当前过滤条件下的全量数据。"""

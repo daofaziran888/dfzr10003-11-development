@@ -3,20 +3,17 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { request } from '@/api/client'
 
 const ENDPOINT = '/api/lineage'
+const VERSION_ENDPOINT = '/api/field-versions'
 const columns = [
   "节点编号",
   "节点名称",
   "节点类型",
-  "上游节点",
-  "下游节点",
   "字段映射",
+  "引用版本编号",
+  "字段业务含义",
+  "版本更新时间",
   "转换逻辑",
   "图谱版本"
-]
-const actions = [
-  "提交审批",
-  "发布节点",
-  "废弃节点"
 ]
 const statuses = [
   "草稿",
@@ -45,8 +42,12 @@ export default function LineageView() {
   const [rows, setRows] = useState<Row[]>([])
   const [total, setTotal] = useState(0)
   const [errorMessage, setErrorMessage] = useState('')
+  const [notice, setNotice] = useState('')
   const [filters, setFilters] = useState<Record<string, string>>({})
-  const filterFields = useMemo(() => columns.slice(0, 3), [])
+  const [versions, setVersions] = useState<Row[]>([])
+  const [bindRow, setBindRow] = useState<Row | null>(null)
+  const [bindVersionId, setBindVersionId] = useState('')
+  const filterFields = useMemo(() => ["节点编号", "节点名称", "节点类型"], [])
 
   const reload = useCallback(async () => {
     setErrorMessage('')
@@ -68,19 +69,37 @@ export default function LineageView() {
     void reload()
   }, [reload])
 
-  async function runAction(action: string, row: Row) {
+  async function openBind(row: Row) {
+    setBindRow(row)
+    setBindVersionId('')
     setErrorMessage('')
+    const response = await request(`${VERSION_ENDPOINT}?size=200`)
+    if (response.ok) {
+      const payload = await response.json()
+      setVersions((payload.items ?? []).filter((v: Row) => v.status === '待审批' || v.status === '已生效'))
+    }
+  }
+
+  async function confirmBind() {
+    if (!bindRow || !bindVersionId) {
+      setErrorMessage('请选择要绑定的字段含义版本')
+      return
+    }
     try {
-      const response = await request(`${ENDPOINT}/${row.id}/actions`, {
+      const response = await request(`${ENDPOINT}/${bindRow.id}/bind-version`, {
         method: 'POST',
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ values: { field_version_id: Number(bindVersionId) } }),
       })
-      if (!response.ok) {
-        throw new Error('血缘图谱动作未生效，请稍后重试')
+      const payload = await response.json()
+      if (!response.ok || !payload.ok) {
+        setErrorMessage(payload.message || '版本绑定失败')
+        return
       }
+      setNotice(payload.message)
+      setBindRow(null)
       await reload()
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : '血缘图谱操作失败')
+      setErrorMessage(error instanceof Error ? error.message : '版本绑定失败')
     }
   }
 
@@ -89,12 +108,12 @@ export default function LineageView() {
       <header className="page-head">
         <div>
           <h2>血缘图谱管理</h2>
-          <p className="page-desc">维护血缘图谱的节点依赖、字段映射与转换记录，为数据溯源提供可审计的数据工程流程。</p>
+          <p className="page-desc">
+            字段映射通过版本引用字段含义：血缘节点与元数据记录页采用同一字段说明版本，
+            含义、版本号与更新时间完全一致，历史引用不会因新版本发布而改变。
+          </p>
         </div>
         <div className="page-actions">
-          <button className="btn primary" type="button" onClick={() => setErrorMessage('血缘节点登记入口尚未接入审批流')}>
-            登记血缘节点
-          </button>
           <button className="btn" type="button" onClick={() => window.open(`${ENDPOINT}/export`, '_blank')}>
             导出血缘图谱清单
           </button>
@@ -102,10 +121,12 @@ export default function LineageView() {
       </header>
 
       <div className="stat-row">
-        {stats.map((item) => (
+        {stats.map((item, index) => (
           <article key={item.label} className="stat-card">
             <span className="stat-label">{item.label}</span>
-            <strong className="stat-value">{item.value}</strong>
+            <strong className="stat-value">
+              {index === 0 ? total : rows.filter((r) => r.status === (index === 1 ? '已生效' : '待审批')).length}
+            </strong>
           </article>
         ))}
       </div>
@@ -129,25 +150,31 @@ export default function LineageView() {
         <thead>
           <tr>
             {columns.map((column) => <th key={column}>{column}</th>)}
-            <th>可执行动作</th>
+            <th>版本操作</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
             <tr key={String(row.id)}>
-              {columns.map((column) => <td key={column}>{row[column] ?? '—'}</td>)}
+              {columns.map((column) => (
+                <td key={column} className={column === '字段业务含义' || column === '字段映射' ? 'cell-wrap' : ''}>
+                  {column === '引用版本编号' && row[column] ? (
+                    <span className="badge badge-已生效">{String(row[column])}</span>
+                  ) : (
+                    row[column] ?? '—'
+                  )}
+                </td>
+              ))}
               <td className="row-actions">
-                {actions.map((action) => (
-                  <button key={action} className="link" type="button" onClick={() => void runAction(action, row)}>
-                    {action}
-                  </button>
-                ))}
+                <button className="link" type="button" onClick={() => void openBind(row)}>
+                  {row.引用版本编号 ? '更换版本引用' : '绑定字段版本'}
+                </button>
               </td>
             </tr>
           ))}
           {rows.length === 0 && (
             <tr>
-              <td className="empty-state" colSpan={columns.length + 1}>暂无血缘图谱数据，可先登记血缘节点</td>
+              <td className="empty-state" colSpan={columns.length + 1}>暂无血缘图谱数据</td>
             </tr>
           )}
         </tbody>
@@ -155,8 +182,35 @@ export default function LineageView() {
 
       <footer className="page-foot">
         <span>共 {total} 条血缘图谱记录</span>
+        {notice && <span className="notice-text">{notice}</span>}
         {errorMessage && <span className="error-text">{errorMessage}</span>}
       </footer>
+
+      {bindRow && (
+        <div className="modal-mask" onClick={() => setBindRow(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>为 {String(bindRow.节点编号)} 绑定字段含义版本</h3>
+            <p className="page-desc">
+              仅可绑定待审批或已生效版本；绑定后字段映射与字段业务含义按该版本快照展示。
+            </p>
+            <label className="modal-field">
+              <span>选择字段版本</span>
+              <select value={bindVersionId} onChange={(e) => setBindVersionId(e.target.value)}>
+                <option value="">请选择版本</option>
+                {versions.map((v) => (
+                  <option key={String(v.id)} value={String(v.id)}>
+                    {String(v.版本编号)} ｜ {String(v.记录编号)} ｜ {String(v.字段名称)} ｜ {String(v.status)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="modal-actions">
+              <button className="btn" type="button" onClick={() => setBindRow(null)}>取消</button>
+              <button className="btn primary" type="button" onClick={() => void confirmBind()}>确认绑定</button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

@@ -11,7 +11,10 @@ const columns = [
   "变更前值",
   "变更后值",
   "变更批次",
-  "变更时间"
+  "变更时间",
+  "引用版本编号",
+  "字段业务含义",
+  "版本更新时间"
 ]
 const actions = [
   "标记复核",
@@ -44,13 +47,13 @@ export default function CatalogView() {
   const [total, setTotal] = useState(0)
   const [errorMessage, setErrorMessage] = useState('')
   const [filters, setFilters] = useState<Record<string, string>>({})
-  const filterFields = useMemo(() => columns.slice(0, 3), [])
+  const filterFields = useMemo(() => ["记录编号", "表名称", "变更类型"], [])
 
   const reload = useCallback(async () => {
     setErrorMessage('')
     const query = new URLSearchParams(filters).toString()
     try {
-      const response = await request(`${ENDPOINT}?${query}`)
+      const response = await request(`${ENDPOINT}?${query}&size=200`)
       if (!response.ok) {
         throw new Error('演进记录列表读取失败')
       }
@@ -73,8 +76,9 @@ export default function CatalogView() {
         method: 'POST',
         body: JSON.stringify({ action }),
       })
-      if (!response.ok) {
-        throw new Error('表结构演进动作未生效，请稍后重试')
+      const payload = await response.json()
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.message || '表结构演进动作未生效')
       }
       await reload()
     } catch (error) {
@@ -87,12 +91,12 @@ export default function CatalogView() {
       <header className="page-head">
         <div>
           <h2>表结构演进管理</h2>
-          <p className="page-desc">维护表结构演进的变更类型、前后对比与批次记录，为表结构治理提供可追溯的数据工程流程。</p>
+          <p className="page-desc">
+            每次字段含义版本发布都会生成一条演进记录并保留版本引用；历史批次回看时展示的仍是当时采用的版本快照，
+            不会只剩最后一份变更。
+          </p>
         </div>
         <div className="page-actions">
-          <button className="btn primary" type="button" onClick={() => setErrorMessage('演进记录登记入口尚未接入审批流')}>
-            登记演进记录
-          </button>
           <button className="btn" type="button" onClick={() => window.open(`${ENDPOINT}/export`, '_blank')}>
             导出表结构演进清单
           </button>
@@ -100,10 +104,14 @@ export default function CatalogView() {
       </header>
 
       <div className="stat-row">
-        {stats.map((item) => (
+        {stats.map((item, index) => (
           <article key={item.label} className="stat-card">
             <span className="stat-label">{item.label}</span>
-            <strong className="stat-value">{item.value}</strong>
+            <strong className="stat-value">
+              {index === 0
+                ? total
+                : rows.filter((r) => r.status === (index === 1 ? '已复核' : '已归档')).length}
+            </strong>
           </article>
         ))}
       </div>
@@ -133,7 +141,17 @@ export default function CatalogView() {
         <tbody>
           {rows.map((row) => (
             <tr key={String(row.id)}>
-              {columns.map((column) => <td key={column}>{row[column] ?? '—'}</td>)}
+              {columns.map((column) => (
+                <td key={column} className={column === '字段业务含义' || column === '变更前值' || column === '变更后值' ? 'cell-wrap' : ''}>
+                  {column === '引用版本编号' && row[column] ? (
+                    <span className="badge badge-已生效">{String(row[column])}</span>
+                  ) : column === '变更类型' && String(row[column]).includes('回填') ? (
+                    <span className="tag tag-backfill">{String(row[column])}</span>
+                  ) : (
+                    row[column] ?? '—'
+                  )}
+                </td>
+              ))}
               <td className="row-actions">
                 {actions.map((action) => (
                   <button key={action} className="link" type="button" onClick={() => void runAction(action, row)}>
@@ -145,7 +163,7 @@ export default function CatalogView() {
           ))}
           {rows.length === 0 && (
             <tr>
-              <td className="empty-state" colSpan={columns.length + 1}>暂无表结构演进数据，可先登记演进记录</td>
+              <td className="empty-state" colSpan={columns.length + 1}>暂无表结构演进数据</td>
             </tr>
           )}
         </tbody>
